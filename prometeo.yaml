@@ -1,0 +1,35 @@
+# 1. EL DEPLOYMENT (Los clones del agente)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometeo-deployment
+spec:
+  replicas: 2 # ¡Aquí le decimos que queremos 2 copias corriendo al mismo tiempo!
+  selector:
+    matchLabels:
+      app: prometeo
+  template:
+    metadata:
+      labels:
+        app: prometeo
+    spec:
+      containers:
+      - name: agente-contenedor
+        image: agente-sre:v1
+        imagePullPolicy: IfNotPresent # CLAVE: Le dice a K8s que use la imagen de mi Mac, no que la busque en internet.
+        ports:
+        - containerPort: 8000
+
+---
+# 2. EL SERVICE (El portero del edificio)
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometeo-service
+spec:
+  type: LoadBalancer # Crea una IP accesible desde tu navegador
+  selector:
+    app: prometeo
+  ports:
+  - port: 8000
+    targetPort: 8000
