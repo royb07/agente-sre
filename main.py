@@ -1,28 +1,59 @@
-from fastapi import FastAPI
-from pydantic import BaseModel
 import os
+import json
+from datetime import datetime
+import psutil
+import boto3
+from fastapi import FastAPI
 
-# Inicializamos la API
-app = FastAPI(title="Mi Primer Agente SRE, llamado Prometeo")
+app = FastAPI(title="Agente SRE - Inspector System")
 
-# Definimos cómo debe llegar la información (Cuerpo de la petición)
-class Alerta(BaseModel):
-    mensaje_error: str
+# Configuración de conexión hacia la Nube (MinIO / S3)
+S3_ENDPOINT = os.getenv("S3_ENDPOINT", "http://localhost:9005")
+AWS_ACCESS_KEY = os.getenv("AWS_ACCESS_KEY", "test")
+AWS_SECRET_KEY = os.getenv("AWS_SECRET_KEY", "testpassword")
+BUCKET_NAME = os.getenv("BUCKET_NAME", "prometeo-datos-bucket")
 
-# Ruta principal de prueba
+def obtener_cliente_s3():
+    return boto3.client(
+        "s3",
+        endpoint_url=S3_ENDPOINT,
+        aws_access_key_id=AWS_ACCESS_KEY,
+        aws_secret_access_key=AWS_SECRET_KEY,
+        region_name="us-east-1"
+    )
+
 @app.get("/")
-def read_root():
-    return {"status": "El agente está vivo y respirando."}
+def home():
+    return {"status": "ok", "agent": "Prometeo SRE Agent", "version": "2.0"}
 
-# Ruta donde el agente procesa el error
-@app.post("/analizar-alerta")
-def analizar_alerta(alerta: Alerta):
-    # Aquí es donde conectaremos la API key real más adelante.
-    # Por ahora, simularemos que la IA piensa y responde.
+@app.post("/ejecutar-diagnostico")
+def ejecutar_diagnostico():
+    # 1. Recopilar métricas reales del contenedor/sistema
+    timestamp = datetime.utcnow().isoformat()
+    reporte = {
+        "timestamp": timestamp,
+        "agente": "prometeo-sre-v2",
+        "metricas": {
+            "cpu_usage_percent": psutil.cpu_percent(interval=1),
+            "memory_usage_percent": psutil.virtual_memory().percent,
+            "disk_usage_percent": psutil.disk_usage('/').percent
+        },
+        "estado": "HEALTHY"
+    }
     
-    simulacion_ia = f"He analizado el error '{alerta.mensaje_error}'. Sugiero revisar los logs del contenedor y reiniciar el pod."
+    # 2. Guardar el reporte como archivo JSON en el bucket S3
+    nombre_archivo = f"reportes/diagnostico_{datetime.now().strftime('%Y%m%m_%H%M%S')}.json"
+    s3_client = obtener_cliente_s3()
+    
+    s3_client.put_object(
+        Bucket=BUCKET_NAME,
+        Key=nombre_archivo,
+        Body=json.dumps(reporte, indent=2),
+        ContentType="application/json"
+    )
     
     return {
-        "agente": "SRE-Prometeo-V1",
-        "analisis": simulacion_ia
+        "mensaje": "Diagnóstico ejecutado y guardado en la nube exitosamente",
+        "archivo_guardado": nombre_archivo,
+        "datos": reporte
     }
